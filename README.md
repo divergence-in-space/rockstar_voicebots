@@ -59,14 +59,17 @@ User                      LiveKit Room Worker (Dost/Sathi)            Providers 
 
 ## 2. Technology Stack & Design Decisions
 
+## Technology Stack & Design Decisions
+
 | Component | Selected Technology | Rationale & Alternatives Evaluated |
-| :--- | :--- | :--- |
-| **Transport** | **LiveKit Cloud / Agents SDK** | Low-latency WebRTC transport, built-in room state, participant lifecycle events, and native VAD integration. |
-| **VAD** | **Silero VAD** | Robust voice activity detection for speech boundary detection and barge-in cutoffs. |
-| **STT** | **Deepgram (`nova-2`)** | Sub-300ms streaming transcription latency, strong phonetic recognition for Indian names and code-mixed words. |
-| **LLM** | **Groq (`llama-3.1-8b-instant`)** | High-speed inference (~500 tokens/sec) critical for real-time turn latency; fine-tuned via prompt engineering for natural Hinglish. *(Evaluated `gpt-4o-mini` and `llama-3.3-70b-versatile`)*. |
-| **TTS (Dost)** | **ElevenLabs (`eleven_multilingual_v2`)** | Native multilingual accent modeling that avoids foreign/robotic pronunciation of Hindi words. *(Fallback: Deepgram Aura-2 `orion`)*. |
-| **TTS (Sathi)** | **OpenAI (`tts-1`, Nova) / ElevenLabs** | High availability, female voice distinction. Uses Devanagari script routing to produce authentic Indian phonetic cadence. *(Evaluated Sarvam AI `bulbul:v2`, blocked by upstream 403 authorization)*. |
+|---|---|---|
+| Transport | LiveKit Cloud / Agents SDK (Python) | WebRTC rooms, participant lifecycle events, and per-bot agent workers with explicit `agent_name`. |
+| VAD | Silero VAD | Detects speech boundaries for turn handling. |
+| STT | Deepgram (plugin default model) | Streaming transcription that worked from the start with no issues. |
+| LLM | Groq, `openai/gpt-oss-120b` (via the OpenAI-compatible endpoint) | Fast inference for low turn latency; Hinglish persona set by prompt engineering. Gemini and `llama-3.3-70b-versatile` (deprecated) were tried and dropped. |
+| TTS (Dost) | ElevenLabs (`eleven_multilingual_v2`) | Multilingual model that handles Hinglish text. Fallback: Deepgram Aura-2 (`orion`). |
+| TTS (Sathi) | Cartesia (`sonic-3`, `language="hi"`) | Hindi-capable female voice with a free tier. Earlier attempts: Deepgram Aura-2 (`thalia`) and OpenAI `tts-1` (English accent), Sarvam `bulbul:v3` (blocked by a 403), ElevenLabs (key loading problem). |
+| Turn routing | Name-based, in code | Each bot skips its turn when the other is named. See Known Limitations. |
 
 ---
 
@@ -173,6 +176,7 @@ python agent_sathi.py dev
 ## 8. Known Limitations & Next Steps
 
 * **Testing Tool Single-Agent Scope:** LiveKit Cloud's built-in Agent Console UI binds to a single worker target per test session, requiring sequential validation in the console tool rather than dual-worker simultaneous presence in the test sandbox.
+* * **Two-bot integration not completed:** Dost (`agent.py`) and Sathi (`agent_sathi.py`) were each built and verified separately, but they have **not been run together in one room**. LiveKit's Agent Console starts one named agent per test session, and running both in the same room needs explicit dispatch of both agents, which was not set up in time. As a result, the name-based turn routing (each bot skips a turn when the other is named) is implemented but **has not been tested live**, and overlapping greetings or replies between the bots have not been ruled out
 * **Provider Upstream Latency:** Using multilingual TTS models incurs an additional ~200-400ms TTFB compared to single-language streaming engines. Future iterations will leverage custom fine-tuned edge models.
 * **Accent Tuning (Sarvam AI Fallback):** Sarvam AI (`bulbul:v2`) was evaluated for regional Indic pronunciation but hit upstream 403 authorization restrictions during build. Fallback was successfully deployed using ElevenLabs and OpenAI Devanagari script routing.
 * **Next Steps:** Implement shared Redis-backed session memory across distributed worker processes and implement a unified LiveKit agent dispatcher for multi-agent room dispatching.
